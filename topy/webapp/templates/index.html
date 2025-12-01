@@ -136,6 +136,14 @@
             background: #219a52;
         }
         
+        button.warning {
+            background: #e67e22;
+        }
+        
+        button.warning:hover {
+            background: #d35400;
+        }
+        
         .progress-container {
             margin-top: 20px;
         }
@@ -392,6 +400,9 @@
             </div>
         </div>
         <div id="optimizeStatus"></div>
+        <div id="retryContainer" style="display: none; margin-top: 15px;">
+            <button id="retryBtn" class="warning">🔄 Go Back to Configure</button>
+        </div>
     </div>
     
     <!-- Step 4: Download -->
@@ -402,6 +413,9 @@
             <button id="downloadPly" class="success">Download PLY</button>
             <button id="downloadGlb" class="success">Download GLB</button>
             <button id="downloadVtk" class="secondary">Download VTK</button>
+        </div>
+        <div style="margin-top: 15px;">
+            <button id="reconfigureBtn" class="secondary">🔄 Reconfigure & Run Again</button>
         </div>
         <div id="downloadStatus"></div>
     </div>
@@ -456,7 +470,7 @@
         }
         
         // Update step indicators
-        function updateSteps(step) {
+        function updateSteps(step, enableReconfigure = false) {
             currentStep = step;
             for (let i = 1; i <= 4; i++) {
                 const stepEl = document.getElementById(`step${i}`);
@@ -468,10 +482,29 @@
                 }
             }
             
-            // Enable/disable cards
-            configCard.classList.toggle('disabled', step < 2);
+            // Enable/disable cards based on step
+            // When enableReconfigure is true, keep config card enabled for reconfiguration
+            configCard.classList.toggle('disabled', step < 2 && !enableReconfigure);
             optimizeCard.classList.toggle('disabled', step < 3);
             downloadCard.classList.toggle('disabled', step < 4);
+            
+            // Reset progress bar when going back to configure
+            if (step === 2) {
+                document.getElementById('progressContainer').style.display = 'none';
+                document.getElementById('progressFill').style.width = '0%';
+                document.getElementById('progressFill').textContent = '0%';
+                document.getElementById('retryContainer').style.display = 'none';
+                document.getElementById('optimizeStatus').innerHTML = '';
+            }
+        }
+        
+        // Function to go back to configure step
+        function goToConfigureStep() {
+            updateSteps(2);
+            configCard.classList.remove('disabled');
+            showStatus('configStatus', 'Modify parameters and save configuration to run again.', 'info');
+            // Scroll to config section
+            configCard.scrollIntoView({ behavior: 'smooth' });
         }
         
         // Show status message
@@ -601,6 +634,7 @@
             
             document.getElementById('optimizeBtn').disabled = true;
             document.getElementById('progressContainer').style.display = 'block';
+            document.getElementById('retryContainer').style.display = 'none';
             showStatus('optimizeStatus', 'Running optimization...', 'info');
             
             let pollFailures = 0;
@@ -631,6 +665,7 @@
                     } else if (statusData.status === 'failed') {
                         clearInterval(progressInterval);
                         showStatus('optimizeStatus', statusData.error || 'Optimization failed', 'error');
+                        document.getElementById('retryContainer').style.display = 'block';
                         document.getElementById('optimizeBtn').disabled = false;
                     }
                 } catch (err) {
@@ -660,10 +695,12 @@
                     updateSteps(4);
                 } else {
                     showStatus('optimizeStatus', data.error || 'Optimization failed', 'error');
+                    document.getElementById('retryContainer').style.display = 'block';
                 }
             } catch (err) {
                 clearInterval(progressInterval);
                 showStatus('optimizeStatus', 'Network error: ' + err.message + '. The optimization may still be running - check status.', 'error');
+                document.getElementById('retryContainer').style.display = 'block';
             }
             
             document.getElementById('optimizeBtn').disabled = false;
@@ -686,6 +723,16 @@
             if (currentJobId) {
                 window.location.href = `/download/${currentJobId}?format=glb`;
             }
+        });
+        
+        // Retry button handler (from failed optimization)
+        document.getElementById('retryBtn').addEventListener('click', () => {
+            goToConfigureStep();
+        });
+        
+        // Reconfigure button handler (from completed job)
+        document.getElementById('reconfigureBtn').addEventListener('click', () => {
+            goToConfigureStep();
         });
     </script>
 </body>

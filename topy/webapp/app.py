@@ -144,8 +144,9 @@ def register_routes(app: Flask) -> None:
         
         job = _jobs[job_id]
         
-        if job.status not in ('uploaded', 'configured'):
-            return jsonify({'error': f'Cannot configure job in {job.status} state'}), 400
+        # Allow reconfiguration from any state except 'running'
+        if job.status == 'running':
+            return jsonify({'error': 'Cannot configure job while it is running'}), 400
         
         try:
             data = request.get_json()

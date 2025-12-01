@@ -193,8 +193,9 @@ def _run_simplified_optimization(input_grid: np.ndarray,
         U = np.zeros(ndof)
         try:
             U[free_dofs] = spsolve(K[free_dofs, :][:, free_dofs], F[free_dofs])
-        except Exception:
-            # If solve fails, return current best
+        except (np.linalg.LinAlgError, ValueError, RuntimeError):
+            # If solve fails due to singular matrix or numerical issues, 
+            # return current best result
             break
         
         # Sensitivity analysis

@@ -288,6 +288,8 @@ def register_routes(app: Flask) -> None:
                 ply_path = job.result_file.replace('.vtk', '.ply')
                 if not os.path.exists(ply_path):
                     # Generate PLY from the optimization result
+                    if job.result_grid is None:
+                        return jsonify({'error': 'Result grid not available'}), 500
                     ply_path = voxel_grid_to_ply(
                         job.result_grid,
                         threshold=0.5,

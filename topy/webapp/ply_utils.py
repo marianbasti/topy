@@ -133,19 +133,23 @@ def voxel_grid_to_ply(grid: np.ndarray,
     vertex_offset = 0
     
     # Define cube vertices relative to origin
+    # Vertices are indexed 0-7 for an axis-aligned unit cube:
+    #   0: (0,0,0), 1: (1,0,0), 2: (1,1,0), 3: (0,1,0)
+    #   4: (0,0,1), 5: (1,0,1), 6: (1,1,1), 7: (0,1,1)
     cube_vertices = np.array([
         [0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0],
         [0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 1, 1]
     ], dtype=float)
     
-    # Define cube faces (quads as triangles)
+    # Define cube faces (quads as triangles) with consistent counter-clockwise winding
+    # when viewed from outside the cube (outward-facing normals)
     cube_faces = [
-        [0, 1, 2], [0, 2, 3],  # bottom
-        [4, 6, 5], [4, 7, 6],  # top
-        [0, 4, 5], [0, 5, 1],  # front
-        [2, 6, 7], [2, 7, 3],  # back
-        [0, 3, 7], [0, 7, 4],  # left
-        [1, 5, 6], [1, 6, 2],  # right
+        [0, 2, 1], [0, 3, 2],  # bottom (z=0), normal pointing -z
+        [4, 5, 6], [4, 6, 7],  # top (z=1), normal pointing +z
+        [0, 1, 5], [0, 5, 4],  # front (y=0), normal pointing -y
+        [2, 3, 7], [2, 7, 6],  # back (y=1), normal pointing +y
+        [0, 4, 7], [0, 7, 3],  # left (x=0), normal pointing -x
+        [1, 2, 6], [1, 6, 5],  # right (x=1), normal pointing +x
     ]
     
     for voxel in solid_voxels:

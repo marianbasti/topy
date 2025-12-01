@@ -122,7 +122,7 @@ class TestUpload:
         }, content_type='multipart/form-data')
         assert response.status_code == 400
         data = json.loads(response.data)
-        assert 'PLY' in data['error']
+        assert 'PLY' in data['error'] or 'GLB' in data['error']
     
     def test_upload_valid_ply(self, client, sample_ply_file):
         """Test upload with valid PLY file succeeds."""

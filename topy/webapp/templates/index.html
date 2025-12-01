@@ -313,12 +313,12 @@
     
     <!-- Step 1: Upload -->
     <div class="card" id="uploadCard">
-        <h2>📤 Step 1: Upload PLY File</h2>
+        <h2>📤 Step 1: Upload 3D Mesh File</h2>
         <form id="uploadForm">
             <div class="form-group">
-                <label for="plyFile">Select PLY File</label>
-                <input type="file" id="plyFile" name="file" accept=".ply" required>
-                <p class="help-text">Supported format: PLY (Polygon File Format)</p>
+                <label for="meshFile">Select 3D Mesh File</label>
+                <input type="file" id="meshFile" name="file" accept=".ply,.glb" required>
+                <p class="help-text">Supported formats: PLY (Polygon File Format), GLB (glTF Binary)</p>
             </div>
             <button type="submit" id="uploadBtn">Upload File</button>
         </form>
@@ -400,6 +400,7 @@
         <p>Your optimized mesh is ready! Choose a format to download:</p>
         <div class="download-options">
             <button id="downloadPly" class="success">Download PLY</button>
+            <button id="downloadGlb" class="success">Download GLB</button>
             <button id="downloadVtk" class="secondary">Download VTK</button>
         </div>
         <div id="downloadStatus"></div>
@@ -422,6 +423,37 @@
         const configCard = document.getElementById('configCard');
         const optimizeCard = document.getElementById('optimizeCard');
         const downloadCard = document.getElementById('downloadCard');
+        
+        // Robust fetch with retry logic for network stability
+        async function fetchWithRetry(url, options = {}, maxRetries = 3, delay = 1000) {
+            let lastError;
+            for (let attempt = 0; attempt < maxRetries; attempt++) {
+                try {
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 60000); // 60s timeout
+                    
+                    const response = await fetch(url, {
+                        ...options,
+                        signal: controller.signal
+                    });
+                    
+                    clearTimeout(timeoutId);
+                    return response;
+                } catch (err) {
+                    lastError = err;
+                    console.warn(`Fetch attempt ${attempt + 1} failed:`, err.message);
+                    
+                    // Don't retry on abort or if it's the last attempt
+                    if (err.name === 'AbortError' || attempt === maxRetries - 1) {
+                        break;
+                    }
+                    
+                    // Wait before retrying with exponential backoff
+                    await new Promise(resolve => setTimeout(resolve, delay * Math.pow(2, attempt)));
+                }
+            }
+            throw lastError;
+        }
         
         // Update step indicators
         function updateSteps(step) {
@@ -460,7 +492,7 @@
         uploadForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             
-            const fileInput = document.getElementById('plyFile');
+            const fileInput = document.getElementById('meshFile');
             const file = fileInput.files[0];
             
             if (!file) {
@@ -475,7 +507,7 @@
             showStatus('uploadStatus', 'Uploading...', 'info');
             
             try {
-                const response = await fetch('/upload', {
+                const response = await fetchWithRetry('/upload', {
                     method: 'POST',
                     body: formData
                 });
@@ -506,7 +538,7 @@
                     showStatus('uploadStatus', data.error || 'Upload failed', 'error');
                 }
             } catch (err) {
-                showStatus('uploadStatus', 'Network error: ' + err.message, 'error');
+                showStatus('uploadStatus', 'Network error: ' + err.message + '. Please try again.', 'error');
             }
             
             document.getElementById('uploadBtn').disabled = false;
@@ -537,7 +569,7 @@
             showStatus('configStatus', 'Saving configuration...', 'info');
             
             try {
-                const response = await fetch(`/configure/${currentJobId}`, {
+                const response = await fetchWithRetry(`/configure/${currentJobId}`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
@@ -554,13 +586,13 @@
                     showStatus('configStatus', data.error || 'Configuration failed', 'error');
                 }
             } catch (err) {
-                showStatus('configStatus', 'Network error: ' + err.message, 'error');
+                showStatus('configStatus', 'Network error: ' + err.message + '. Please try again.', 'error');
             }
             
             document.getElementById('configBtn').disabled = false;
         });
         
-        // Optimize button handler
+        // Optimize button handler with robust polling
         document.getElementById('optimizeBtn').addEventListener('click', async () => {
             if (!currentJobId) {
                 showStatus('optimizeStatus', 'Please complete previous steps', 'error');
@@ -571,26 +603,51 @@
             document.getElementById('progressContainer').style.display = 'block';
             showStatus('optimizeStatus', 'Running optimization...', 'info');
             
-            // Start polling for progress
+            let pollFailures = 0;
+            const maxPollFailures = 10;
+            
+            // Start polling for progress with error tolerance
             const progressInterval = setInterval(async () => {
                 try {
                     const statusResponse = await fetch(`/status/${currentJobId}`);
                     const statusData = await statusResponse.json();
+                    
+                    pollFailures = 0; // Reset on success
                     
                     if (statusData.progress !== undefined) {
                         const percent = Math.round(statusData.progress * 100);
                         document.getElementById('progressFill').style.width = percent + '%';
                         document.getElementById('progressFill').textContent = percent + '%';
                     }
+                    
+                    // Check if completed or failed via polling
+                    if (statusData.status === 'completed') {
+                        clearInterval(progressInterval);
+                        document.getElementById('progressFill').style.width = '100%';
+                        document.getElementById('progressFill').textContent = '100%';
+                        showStatus('optimizeStatus', 'Optimization completed!', 'success');
+                        updateSteps(4);
+                        document.getElementById('optimizeBtn').disabled = false;
+                    } else if (statusData.status === 'failed') {
+                        clearInterval(progressInterval);
+                        showStatus('optimizeStatus', statusData.error || 'Optimization failed', 'error');
+                        document.getElementById('optimizeBtn').disabled = false;
+                    }
                 } catch (err) {
-                    // Ignore polling errors
+                    pollFailures++;
+                    console.warn(`Poll attempt failed (${pollFailures}/${maxPollFailures}):`, err.message);
+                    // Don't stop polling on transient errors
+                    if (pollFailures >= maxPollFailures) {
+                        console.warn('Too many poll failures, continuing anyway...');
+                        pollFailures = 0;
+                    }
                 }
-            }, 500);
+            }, 1000); // Poll every second instead of 500ms for stability
             
             try {
-                const response = await fetch(`/optimize/${currentJobId}`, {
+                const response = await fetchWithRetry(`/optimize/${currentJobId}`, {
                     method: 'POST'
-                });
+                }, 3, 2000); // 3 retries with 2s initial delay
                 
                 clearInterval(progressInterval);
                 
@@ -606,7 +663,7 @@
                 }
             } catch (err) {
                 clearInterval(progressInterval);
-                showStatus('optimizeStatus', 'Network error: ' + err.message, 'error');
+                showStatus('optimizeStatus', 'Network error: ' + err.message + '. The optimization may still be running - check status.', 'error');
             }
             
             document.getElementById('optimizeBtn').disabled = false;
@@ -622,6 +679,12 @@
         document.getElementById('downloadVtk').addEventListener('click', () => {
             if (currentJobId) {
                 window.location.href = `/download/${currentJobId}?format=vtk`;
+            }
+        });
+        
+        document.getElementById('downloadGlb').addEventListener('click', () => {
+            if (currentJobId) {
+                window.location.href = `/download/${currentJobId}?format=glb`;
             }
         });
     </script>

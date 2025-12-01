@@ -14,6 +14,7 @@ from flask import (Flask, render_template, request, jsonify,
 from .ply_utils import (parse_ply_file, ply_to_voxel_grid, 
                          voxel_grid_to_ply, estimate_grid_resolution,
                          get_ply_info)
+from .glb_utils import parse_glb_file, voxel_grid_to_glb
 from .optimizer import run_optimization, get_job_status, OptimizationJob
 
 # Store active jobs (in production, use Redis or database)
@@ -64,7 +65,7 @@ def register_routes(app: Flask) -> None:
     @app.route('/upload', methods=['POST'])
     def upload_file():
         """
-        Handle PLY file upload.
+        Handle PLY or GLB file upload.
         
         Returns:
             JSON response with file info and suggested parameters.
@@ -77,38 +78,46 @@ def register_routes(app: Flask) -> None:
         if file.filename == '':
             return jsonify({'error': 'No file selected'}), 400
         
-        if not file.filename.lower().endswith('.ply'):
-            return jsonify({'error': 'Only PLY files are supported'}), 400
+        filename_lower = file.filename.lower()
+        if not (filename_lower.endswith('.ply') or filename_lower.endswith('.glb')):
+            return jsonify({'error': 'Only PLY and GLB files are supported'}), 400
         
         # Generate unique job ID
         job_id = uuid.uuid4().hex
         
+        # Determine file extension
+        file_ext = '.glb' if filename_lower.endswith('.glb') else '.ply'
+        
         # Save uploaded file
         upload_path = os.path.join(
             app.config['UPLOAD_FOLDER'], 
-            f"{job_id}.ply"
+            f"{job_id}{file_ext}"
         )
         file.save(upload_path)
         
         try:
-            # Parse PLY file and get info
-            ply_data = parse_ply_file(upload_path)
-            suggested_resolution = estimate_grid_resolution(ply_data)
+            # Parse file based on type
+            if file_ext == '.glb':
+                mesh_data = parse_glb_file(upload_path)
+            else:
+                mesh_data = parse_ply_file(upload_path)
+            
+            suggested_resolution = estimate_grid_resolution(mesh_data)
             
             # Store job info
             _jobs[job_id] = OptimizationJob(
                 job_id=job_id,
                 input_file=upload_path,
                 status='uploaded',
-                ply_data=ply_data
+                ply_data=mesh_data  # Works for both PLY and GLB data
             )
             
             return jsonify({
                 'job_id': job_id,
                 'filename': file.filename,
-                'num_vertices': ply_data['num_vertices'],
-                'num_faces': ply_data['num_faces'],
-                'dimensions': ply_data['dimensions'].tolist(),
+                'num_vertices': mesh_data['num_vertices'],
+                'num_faces': mesh_data['num_faces'],
+                'dimensions': mesh_data['dimensions'].tolist(),
                 'suggested_resolution': list(suggested_resolution),
                 'message': 'File uploaded successfully'
             })
@@ -302,6 +311,24 @@ def register_routes(app: Flask) -> None:
                 ply_path,
                 as_attachment=True,
                 download_name=f"optimized_{job_id}.ply"
+            )
+        elif file_format == 'glb':
+            # Generate GLB from the optimization result
+            if job.result_grid is None:
+                return jsonify({'error': 'Result grid not available'}), 500
+            
+            glb_path = job.result_file.replace('.ply', '.glb').replace('.vtk', '.glb')
+            if not os.path.exists(glb_path):
+                glb_path = voxel_grid_to_glb(
+                    job.result_grid,
+                    threshold=0.5,
+                    output_path=glb_path
+                )
+            
+            return send_file(
+                glb_path,
+                as_attachment=True,
+                download_name=f"optimized_{job_id}.glb"
             )
         else:
             return jsonify({'error': 'Unsupported format'}), 400

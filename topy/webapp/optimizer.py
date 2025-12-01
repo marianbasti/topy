@@ -217,17 +217,24 @@ def _run_simplified_optimization(input_grid: np.ndarray,
         dv = H @ dv.flatten() / Hs
         dv = dv.reshape((nelz, nely, nelx))
         
+        # Ensure dv is never zero to avoid division issues
+        dv = np.maximum(dv, 1e-10)
+        
         # Optimality criteria update
-        l1, l2 = 0, 1e9
+        l1, l2 = 1e-9, 1e9  # Use small positive value for l1 to avoid division by zero
         move = 0.2
         
         while (l2 - l1) / (l1 + l2) > 1e-3:
             lmid = 0.5 * (l1 + l2)
+            # Compute the OC update with numerical safeguards
+            # -dc should be positive for compliance minimization
+            # Use np.maximum to ensure we don't take sqrt of negative numbers
+            Be = np.maximum(1e-10, -dc / dv / lmid)
             xnew = np.maximum(0.001, 
                      np.maximum(x - move, 
                        np.minimum(1.0, 
                          np.minimum(x + move, 
-                           x * np.sqrt(-dc / dv / lmid)))))
+                           x * np.sqrt(Be)))))
             xnew[passive] = 0.001
             
             if xnew.sum() > vol_frac * nelx * nely * nelz:

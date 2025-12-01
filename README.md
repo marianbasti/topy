@@ -9,6 +9,37 @@ ToPy is a lightweight topology optimization framework for Python that can solve
 compliance (stiffness), mechanism synthesis and heat conduction problems in 2D and 3D.
 Please refer to the [ToPy Wiki](https://github.com/williamhunter/topy/wiki) for further information.
 
+## Web Application (NEW!)
+
+ToPy now includes a web-based interface for 3D topology optimization with PLY file support!
+
+### Quick Start
+
+```bash
+# Install with webapp dependencies
+pip install -e ".[webapp]"
+
+# Run the web server
+topy-web --port 5000
+```
+
+Then open http://localhost:5000 in your browser.
+
+### Features
+
+- **Upload PLY files**: Import your 3D mesh models directly
+- **Configure parameters**: Set volume fraction, filter radius, iterations, and more
+- **Run optimization**: Execute SIMP-based topology optimization
+- **Download results**: Get your optimized mesh in PLY or VTK format
+
+### Web Interface
+
+The webapp provides a simple 4-step workflow:
+1. **Upload** - Upload a PLY (Polygon File Format) 3D mesh
+2. **Configure** - Set optimization parameters (volume fraction, filter radius, etc.)
+3. **Optimize** - Run the topology optimization algorithm
+4. **Download** - Download the optimized mesh as PLY or VTK
+
 ## Example of a ToPy result
 An [example TPD file and solution/result](https://github.com/williamhunter/ToPy/wiki/Examples-of-ToPy-results)
 
@@ -28,6 +59,13 @@ $ cd topy/topy
 $ python setup.py install
 ```
 
+### Web Application Installation (Python 3)
+
+For the web application only (works with Python 3.8+):
+
+```bash
+pip install -e ".[webapp]"
+```
 
 ### ToPy and Python 3
 ToPy is fairly old. I started working on it in 2005 and finished it around 2009, so that implies that the stable release only 

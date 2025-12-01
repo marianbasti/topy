@@ -48,6 +48,7 @@ htmlcov/
 nosetests.xml
 coverage.xml
 *,cover
+.pytest_cache/
 
 # Translations
 *.mo
@@ -84,6 +85,11 @@ examples/*/*.vtk
 
 # VSCode
 .vscode/
+
+# Webapp temp files
+topy_uploads/
+topy_results/
+*.ply.tmp
 
 # DON'T (!) ignore what's inside imgsrc
 !imgsrc/*
